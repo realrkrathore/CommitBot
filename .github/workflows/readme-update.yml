@@ -1,0 +1,172 @@
+name: Daily README Update (Personal Contributions)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Manual trigger
+  schedule:
+    # IST to UTC conversion (IST = UTC+5:30)
+    - cron: "30 0 * * *" # 6:00 AM IST (00:30 UTC)
+    - cron: "30 12 * * *" # 6:00 PM IST (12:30 UTC)
+    - cron: "30 6 * * 6,0" # 12:00 PM IST (06:30 UTC) - weekends only (Saturday=6, Sunday=0)
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # IMPORTANT: Use a personal access token for contributions to count
+          # Create a PAT at: https://github.com/settings/tokens
+          # Add it as a repository secret named 'PAT_TOKEN'
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Get IST Time
+        id: datetime
+        run: |
+          current_time=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S %Z")
+          echo "current_time=$current_time" >> $GITHUB_OUTPUT
+
+      - name: Check Weekend
+        id: weekend
+        run: |
+          day=$(TZ="Asia/Kolkata" date +%u)
+          if [[ $day -gt 5 ]]; then
+            echo "is_weekend=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_weekend=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Day of week: $day"
+
+      - name: Determine if should run
+        id: should_run
+        run: |
+          should_run=false
+
+          # Always run on manual trigger or push
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ "${{ github.event_name }}" == "push" ]]; then
+            should_run=true
+            echo "Running due to manual trigger or push"
+          # For scheduled runs
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            # Morning and evening runs (daily)
+            if [[ "${{ github.event.schedule }}" == "30 0 * * *" ]] || [[ "${{ github.event.schedule }}" == "30 12 * * *" ]]; then
+              should_run=true
+              echo "Running scheduled morning/evening update"
+            # Weekend noon run
+            elif [[ "${{ github.event.schedule }}" == "30 6 * * 6,0" ]] && [[ "${{ steps.weekend.outputs.is_weekend }}" == "true" ]]; then
+              should_run=true
+              echo "Running weekend noon update"
+            fi
+          fi
+
+          echo "should_run=$should_run" >> $GITHUB_OUTPUT
+          echo "Should run: $should_run"
+
+      - name: Update README
+        if: steps.should_run.outputs.should_run == 'true'
+        run: |
+          # Check if README.md exists, create if not
+          if [[ ! -f README.md ]]; then
+            echo "# CommitBot" > README.md
+            echo "" >> README.md
+            echo "This repository contains an automated commit bot that maintains daily contributions." >> README.md
+            echo "" >> README.md
+            echo "## Auto-Update Log" >> README.md
+            echo "" >> README.md
+            echo "This file is automatically updated daily at 6:00 AM and 6:00 PM IST, with additional weekend updates at 12:00 PM IST." >> README.md
+            echo "" >> README.md
+            echo "<!-- Auto-updates will be appended below -->" >> README.md
+            echo "" >> README.md
+          fi
+
+          # Determine trigger type for better logging
+          trigger_type="Unknown"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            trigger_type="Manual Trigger"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            trigger_type="Push Event"
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            if [[ "${{ github.event.schedule }}" == "30 0 * * *" ]]; then
+              trigger_type="Scheduled - Morning (6:00 AM IST)"
+            elif [[ "${{ github.event.schedule }}" == "30 12 * * *" ]]; then
+              trigger_type="Scheduled - Evening (6:00 PM IST)"
+            elif [[ "${{ github.event.schedule }}" == "30 6 * * 6,0" ]]; then
+              trigger_type="Scheduled - Weekend Noon (12:00 PM IST)"
+            fi
+          fi
+
+          # Append timestamp with trigger info to README
+          echo "" >> README.md
+          echo "**Auto-update:** ${{ steps.datetime.outputs.current_time }} | Trigger: $trigger_type" >> README.md
+
+          echo "README.md updated successfully with trigger type: $trigger_type"
+
+      - name: Commit Changes
+        if: steps.should_run.outputs.should_run == 'true'
+        run: |
+          # CRITICAL: Configure git with YOUR GitHub username and email
+          # Replace these with your actual GitHub username and email
+          # This is what makes the commits count as YOUR contributions
+          git config user.name "realrkrathore"
+          git config user.email "your-email@example.com"  # Replace with your GitHub email
+
+          # Add all changes
+          git add README.md
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes detected in README.md"
+            echo "This might happen if the workflow ran multiple times without changes"
+            
+            # Force a small change to ensure commit happens when manually triggered
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              echo "" >> README.md
+              echo "_Last manual trigger: ${{ steps.datetime.outputs.current_time }}_" >> README.md
+              git add README.md
+              echo "Added manual trigger timestamp to force commit"
+            fi
+          fi
+
+          # Commit if there are staged changes
+          if ! git diff --staged --quiet; then
+            # Create commit message based on trigger type
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              commit_msg="📝 Manual update: ${{ steps.datetime.outputs.current_time }}"
+            elif [[ "${{ github.event_name }}" == "push" ]]; then
+              commit_msg="🚀 Push triggered update: ${{ steps.datetime.outputs.current_time }}"
+            else
+              commit_msg="⏰ Scheduled update: ${{ steps.datetime.outputs.current_time }}"
+            fi
+            
+            git commit -m "$commit_msg"
+            git push
+            echo "✅ Changes committed and pushed successfully!"
+            echo "Commit message: $commit_msg"
+          else
+            echo "❌ No changes to commit after adding files"
+          fi
+
+          # Show final git status for debugging
+          echo "Final git status:"
+          git status --short
+
+      - name: Workflow Summary
+        if: always()
+        run: |
+          echo "=== WORKFLOW EXECUTION SUMMARY ==="
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Time: ${{ steps.datetime.outputs.current_time }}"
+          echo "Should Run: ${{ steps.should_run.outputs.should_run }}"
+          echo "Weekend: ${{ steps.weekend.outputs.is_weekend }}"
+
+          if [[ "${{ steps.should_run.outputs.should_run }}" == "true" ]]; then
+            echo "✅ README.md was updated and committed"
+          else
+            echo "⏭️ Workflow skipped - conditions not met"
+          fi
+
+          echo "=================================="

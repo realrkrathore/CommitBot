@@ -1,0 +1,147 @@
+name: Daily Commit Bot
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Manual trigger
+  schedule:
+    # IST to UTC conversion (IST = UTC+5:30)
+    - cron: "30 0 * * *" # 6:00 AM IST (00:30 UTC)
+    - cron: "30 12 * * *" # 6:00 PM IST (12:30 UTC)
+    - cron: "30 6 * * 6,0" # 12:00 PM IST (06:30 UTC) - weekends only (Saturday=6, Sunday=0)
+
+permissions:
+  contents: write
+
+jobs:
+  commit-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # IMPORTANT: Use a personal access token for contributions to count
+          # Create a PAT at: https://github.com/settings/tokens
+          # Add it as a repository secret named 'PAT_TOKEN'
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Get IST Time
+        id: datetime
+        run: |
+          current_time=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S %Z")
+          formatted_time=$(TZ="Asia/Kolkata" date +"%a %b %d %H:%M:%S %Z %Y")
+          echo "current_time=$current_time" >> $GITHUB_OUTPUT
+          echo "formatted_time=$formatted_time" >> $GITHUB_OUTPUT
+
+      - name: Check Weekend
+        id: weekend
+        run: |
+          day=$(TZ="Asia/Kolkata" date +%u)
+          if [[ $day -gt 5 ]]; then
+            echo "is_weekend=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_weekend=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Day of week: $day"
+
+      - name: Determine if should run
+        id: should_run
+        run: |
+          should_run=false
+
+          # Always run on manual trigger or push
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ "${{ github.event_name }}" == "push" ]]; then
+            should_run=true
+            echo "Running due to manual trigger or push"
+          # For scheduled runs
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            # Morning and evening runs (daily)
+            if [[ "${{ github.event.schedule }}" == "30 0 * * *" ]] || [[ "${{ github.event.schedule }}" == "30 12 * * *" ]]; then
+              should_run=true
+              echo "Running scheduled morning/evening update"
+            # Weekend noon run
+            elif [[ "${{ github.event.schedule }}" == "30 6 * * 6,0" ]] && [[ "${{ steps.weekend.outputs.is_weekend }}" == "true" ]]; then
+              should_run=true
+              echo "Running weekend noon update"
+            fi
+          fi
+
+          echo "should_run=$should_run" >> $GITHUB_OUTPUT
+          echo "Should run: $should_run"
+
+      - name: Update output.txt
+        if: steps.should_run.outputs.should_run == 'true'
+        run: |
+          # Create the commit info similar to bot.sh
+          commit_info="Commit: ${{ steps.datetime.outputs.formatted_time }}"
+
+          # Check if output.txt exists, create if not
+          if [[ ! -f output.txt ]]; then
+            echo "Creating output.txt file..."
+            touch output.txt
+          fi
+
+          # Append the commit info to output.txt (similar to bot.sh)
+          echo "$commit_info" >> output.txt
+          echo "Added to output.txt: $commit_info"
+
+          # Show last few lines for verification
+          echo "Last 5 lines of output.txt:"
+          tail -5 output.txt
+
+      - name: Commit Changes
+        if: steps.should_run.outputs.should_run == 'true'
+        run: |
+          # CRITICAL: Configure git with YOUR GitHub username and email
+          # Replace these with your actual GitHub username and email
+          # This is what makes the commits count as YOUR contributions
+          git config user.name "realrkrathore"
+          git config user.email "rajatatgio@gmail.com"  # Replace with your GitHub email
+
+          # Add output.txt
+          git add output.txt
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes detected in output.txt"
+            
+            # Force a small change to ensure commit happens when manually triggered
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              echo "Manual trigger: ${{ steps.datetime.outputs.formatted_time }}" >> output.txt
+              git add output.txt
+              echo "Added manual trigger entry to force commit"
+            fi
+          fi
+
+          # Commit if there are staged changes
+          if ! git diff --staged --quiet; then
+            # Create commit message similar to bot.sh format
+            commit_msg="Commit: ${{ steps.datetime.outputs.formatted_time }}"
+            
+            git commit -m "$commit_msg"
+            git push
+            echo "✅ Changes committed and pushed successfully!"
+            echo "Commit message: $commit_msg"
+          else
+            echo "❌ No changes to commit after adding files"
+          fi
+
+          # Show final git status for debugging
+          echo "Final git status:"
+          git status --short
+
+      - name: Workflow Summary
+        if: always()
+        run: |
+          echo "=== COMMIT BOT EXECUTION SUMMARY ==="
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Time: ${{ steps.datetime.outputs.current_time }}"
+          echo "Should Run: ${{ steps.should_run.outputs.should_run }}"
+          echo "Weekend: ${{ steps.weekend.outputs.is_weekend }}"
+
+          if [[ "${{ steps.should_run.outputs.should_run }}" == "true" ]]; then
+            echo "✅ output.txt was updated and committed"
+          else
+            echo "⏭️ Workflow skipped - conditions not met"
+          fi
+
+          echo "====================================="
