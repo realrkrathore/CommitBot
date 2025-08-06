@@ -1,8 +1,6 @@
 name: Daily Commit Bot
 on:
-  push:
-    branches: [main]
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch: # Manual trigger only
   schedule:
     # IST to UTC conversion (IST = UTC+5:30)
     - cron: "30 0 * * *" # 6:00 AM IST (00:30 UTC)
@@ -48,10 +46,10 @@ jobs:
         run: |
           should_run=false
 
-          # Always run on manual trigger or push
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ "${{ github.event_name }}" == "push" ]]; then
+          # Always run on manual trigger
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             should_run=true
-            echo "Running due to manual trigger or push"
+            echo "Running due to manual trigger"
           # For scheduled runs
           elif [[ "${{ github.event_name }}" == "schedule" ]]; then
             # Morning and evening runs (daily)
@@ -123,9 +121,7 @@ jobs:
             echo "Commit message: $commit_msg"
           else
             echo "❌ No changes to commit after adding files"
-          fi
-
-          # Show final git status for debugging
+          fi          # Show final git status for debugging
           echo "Final git status:"
           git status --short
 
