@@ -122,7 +122,7 @@ jobs:
           else
             echo "❌ No changes to commit after adding files"
           fi
-          
+
           # Show final git status for debugging
           echo "Final git status:"
           git status --short
