@@ -66,25 +66,64 @@ jobs:
           echo "should_run=$should_run" >> $GITHUB_OUTPUT
           echo "Should run: $should_run"
 
-      - name: Update output.txt
+      - name: Update output.txt and README.md
         if: steps.should_run.outputs.should_run == 'true'
         run: |
           # Create the commit info similar to bot.sh
           commit_info="Commit: ${{ steps.datetime.outputs.formatted_time }}"
-
+          
+          # ===== UPDATE OUTPUT.TXT =====
           # Check if output.txt exists, create if not
           if [[ ! -f output.txt ]]; then
             echo "Creating output.txt file..."
             touch output.txt
           fi
-
+          
           # Append the commit info to output.txt (similar to bot.sh)
           echo "$commit_info" >> output.txt
           echo "Added to output.txt: $commit_info"
+          
+          # ===== UPDATE README.MD =====
+          # Check if README.md exists, create if not
+          if [[ ! -f README.md ]]; then
+            echo "# CommitBot" > README.md
+            echo "" >> README.md
+            echo "This repository contains an automated commit bot that maintains daily contributions." >> README.md
+            echo "" >> README.md
+            echo "## Auto-Update Log" >> README.md
+            echo "" >> README.md
+            echo "This file is automatically updated daily at 6:00 AM and 6:00 PM IST, with additional weekend updates at 12:00 PM IST." >> README.md
+            echo "" >> README.md
+            echo "<!-- Auto-updates will be appended below -->" >> README.md
+            echo "" >> README.md
+          fi
 
+          # Determine trigger type for README logging
+          trigger_type="Unknown"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            trigger_type="Manual Trigger"
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            if [[ "${{ github.event.schedule }}" == "30 0 * * *" ]]; then
+              trigger_type="Scheduled - Morning (6:00 AM IST)"
+            elif [[ "${{ github.event.schedule }}" == "30 12 * * *" ]]; then
+              trigger_type="Scheduled - Evening (6:00 PM IST)"
+            elif [[ "${{ github.event.schedule }}" == "30 6 * * 6,0" ]]; then
+              trigger_type="Scheduled - Weekend Noon (12:00 PM IST)"
+            fi
+          fi
+
+          # Append timestamp with trigger info to README
+          echo "" >> README.md
+          echo "**Auto-update:** ${{ steps.datetime.outputs.current_time }} | Trigger: $trigger_type" >> README.md
+
+          echo "README.md updated successfully with trigger type: $trigger_type"
+          
           # Show last few lines for verification
           echo "Last 5 lines of output.txt:"
           tail -5 output.txt
+          echo ""
+          echo "Last 5 lines of README.md:"
+          tail -5 README.md
 
       - name: Commit Changes
         if: steps.should_run.outputs.should_run == 'true'
@@ -95,18 +134,19 @@ jobs:
           git config user.name "realrkrathore"
           git config user.email "rajatatgio@gmail.com"  # Replace with your GitHub email
 
-          # Add output.txt
-          git add output.txt
+          # Add both files
+          git add output.txt README.md
 
           # Check if there are changes to commit
           if git diff --staged --quiet; then
-            echo "No changes detected in output.txt"
+            echo "No changes detected in files"
             
             # Force a small change to ensure commit happens when manually triggered
             if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
               echo "Manual trigger: ${{ steps.datetime.outputs.formatted_time }}" >> output.txt
-              git add output.txt
-              echo "Added manual trigger entry to force commit"
+              echo "_Last manual trigger: ${{ steps.datetime.outputs.current_time }}_" >> README.md
+              git add output.txt README.md
+              echo "Added manual trigger entries to force commit"
             fi
           fi
 
@@ -137,7 +177,7 @@ jobs:
           echo "Weekend: ${{ steps.weekend.outputs.is_weekend }}"
 
           if [[ "${{ steps.should_run.outputs.should_run }}" == "true" ]]; then
-            echo "✅ output.txt was updated and committed"
+            echo "✅ output.txt and README.md were updated and committed"
           else
             echo "⏭️ Workflow skipped - conditions not met"
           fi
