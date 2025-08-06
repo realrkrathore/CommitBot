@@ -112,7 +112,7 @@ jobs:
           # Replace these with your actual GitHub username and email
           # This is what makes the commits count as YOUR contributions
           git config user.name "realrkrathore"
-          git config user.email "your-email@example.com"  # Replace with your GitHub email
+          git config user.email "rajatatgio@gmail.com"  # Replace with your GitHub email
 
           # Add all changes
           git add README.md
