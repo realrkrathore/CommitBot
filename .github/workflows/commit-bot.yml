@@ -121,7 +121,9 @@ jobs:
             echo "Commit message: $commit_msg"
           else
             echo "❌ No changes to commit after adding files"
-          fi          # Show final git status for debugging
+          fi
+          
+          # Show final git status for debugging
           echo "Final git status:"
           git status --short
 
