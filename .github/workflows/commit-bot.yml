@@ -17,9 +17,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          # IMPORTANT: Use a personal access token for contributions to count
-          # Create a PAT at: https://github.com/settings/tokens
-          # Add it as a repository secret named 'PAT_TOKEN'
+
           token: ${{ secrets.PAT_TOKEN }}
 
       - name: Get IST Time
