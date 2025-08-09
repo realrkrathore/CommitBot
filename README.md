@@ -11,13 +11,6 @@ Generate Organic™ GitHub activity
 
 <br>
 
-Once a day (if my laptop is open),
-<br>commit-bot adds today's line:
-
-```
-Commit: Wed Sep 25 22:00:00 EDT 2019
-```
-
 This is a Bash script
 <br>designed to be run locally
 <br>(i.e. on _your_ machine)
