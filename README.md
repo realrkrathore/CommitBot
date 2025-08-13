@@ -15,10 +15,6 @@ This is a Bash script
 <br>designed to be run locally
 <br>(i.e. on _your_ machine)
 
-<br><br>
-
-> But [@theshteves](https://github.com/theshteves),
-> <br>I want this to run every day
 
 _Oh hush_
 
